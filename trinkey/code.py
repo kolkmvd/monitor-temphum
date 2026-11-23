@@ -23,17 +23,20 @@
 #   IN    comfort zone                     -> green, slow breathing glow
 #   WARN  within 'warn' % of a limit       -> amber, faster glow
 #   OUT   below low / above high / no read -> red blink
-# Thresholds live in RAM and reset to the settings.toml defaults on *RST or
-# power cycle; the exporter pushes docker-compose values over SCPI on connect.
+#
+# RAM note: the SHT4x Trinkey is a SAMD21 with only ~32 kB RAM, so this talks to
+# the sensor directly over I2C and drives the pixel with neopixel_write -- no
+# adafruit_sht4x / neopixel libraries, which together would not fit.
 
+import gc
 import math
 import os
 import time
 
 import board
+import digitalio
+import neopixel_write
 import usb_cdc
-
-import adafruit_sht4x
 
 IDN = "MYOSS,SHT45-Trinkey,0001,1.0"
 
@@ -71,21 +74,19 @@ MEASURE_PERIOD = max(1.0, min(_env_float("MEASURE_INTERVAL", 5.0), 60.0))
 serial = usb_cdc.data if usb_cdc.data is not None else usb_cdc.console
 serial.timeout = 0  # non-blocking reads; we drive timing via in_waiting
 
-# Optional status LED (present on the SHT4x Trinkey). The breathing glow is
-# done by hand with a sine on the brightness -- no adafruit_led_animation, which
-# does not fit the SAMD21 Trinkey's tiny (~50 kB) filesystem.
-try:
-    import neopixel
-
-    _pixel = neopixel.NeoPixel(
-        board.NEOPIXEL, 1, brightness=0.3, auto_write=True
-    )
-except Exception:  # pragma: no cover - hardware optional
-    _pixel = None
-
+# SHT4x over raw I2C (no driver library). 0xFD = measure, high precision.
+SHT4X_ADDR = 0x44
+_cmd = bytes((0xFD,))
+_rx = bytearray(6)
 i2c = board.I2C()
-sht = adafruit_sht4x.SHT4x(i2c)
-sht.mode = adafruit_sht4x.Mode.NOHEAT_HIGHPRECISION
+
+# Status LED via neopixel_write (no neopixel library).
+try:
+    _np = digitalio.DigitalInOut(board.NEOPIXEL)
+    _np.direction = digitalio.Direction.OUTPUT
+    _grb = bytearray(3)
+except Exception:  # pragma: no cover - hardware optional
+    _np = None
 
 # Mutable runtime state.
 hum_low = DEFAULT_HUM_LOW
@@ -98,11 +99,51 @@ _buffer = b""
 
 
 def _read():
-    """Read the sensor, cache the result, return (temp_c, humidity_pct)."""
+    """Read the SHT4x over I2C, cache and return (temp_c, humidity_pct)."""
     global _last_temp, _last_hum
-    t, h = sht.measurements  # (temperature_c, relative_humidity_pct)
-    _last_temp, _last_hum = t, h
-    return t, h
+    while not i2c.try_lock():
+        pass
+    try:
+        i2c.writeto(SHT4X_ADDR, _cmd)
+    finally:
+        i2c.unlock()
+    time.sleep(0.01)  # high-precision conversion takes ~8.2 ms
+    while not i2c.try_lock():
+        pass
+    try:
+        i2c.readfrom_into(SHT4X_ADDR, _rx)
+    finally:
+        i2c.unlock()
+    t_ticks = (_rx[0] << 8) | _rx[1]
+    rh_ticks = (_rx[3] << 8) | _rx[4]
+    t = -45.0 + 175.0 * t_ticks / 65535.0
+    rh = -6.0 + 125.0 * rh_ticks / 65535.0
+    if rh < 0.0:
+        rh = 0.0
+    elif rh > 100.0:
+        rh = 100.0
+    _last_temp, _last_hum = t, rh
+    return t, rh
+
+
+def _pixel_set(color):
+    if _np is None:
+        return
+    _grb[0] = color[1]  # NeoPixel wire order is G, R, B
+    _grb[1] = color[0]
+    _grb[2] = color[2]
+    neopixel_write.neopixel_write(_np, _grb)
+
+
+def _breathe(now, color, period):
+    """Pulse `color` smoothly via a sine on the brightness level."""
+    phase = (math.sin(now * (2 * math.pi / period)) + 1) / 2
+    level = GLOW_FLOOR + (1 - GLOW_FLOOR) * phase
+    _pixel_set((
+        int(color[0] * level),
+        int(color[1] * level),
+        int(color[2] * level),
+    ))
 
 
 def _zone(h):
@@ -114,28 +155,9 @@ def _zone(h):
     return "IN"
 
 
-def _pixel_set(color):
-    if _pixel is not None:
-        _pixel[0] = color
-
-
-def _scale(color, level):
-    return (
-        int(color[0] * level),
-        int(color[1] * level),
-        int(color[2] * level),
-    )
-
-
-def _breathe(now, color, period):
-    """Pulse `color` smoothly via a sine on the brightness level."""
-    phase = (math.sin(now * (2 * math.pi / period)) + 1) / 2
-    _pixel_set(_scale(color, GLOW_FLOOR + (1 - GLOW_FLOOR) * phase))
-
-
 def _update_indicator(now):
     """Drive the NeoPixel from the last cached humidity reading."""
-    if _pixel is None:
+    if _np is None:
         return
     zone = _zone(_last_hum)
     if zone == "IN":
@@ -239,6 +261,7 @@ def _parse_pct(arg):
 
 
 # Prime the cache once so the LED reflects reality immediately.
+gc.collect()
 try:
     _read()
 except Exception:
@@ -256,6 +279,7 @@ while True:
             _read()
         except Exception:
             _last_hum = None  # flag sensor error -> red alarm
+        gc.collect()
 
     _update_indicator(now)
 
