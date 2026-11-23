@@ -80,6 +80,26 @@ docker compose up -d           # exporter + Prometheus + Grafana
 | `sht45_up`                            | 1 = last read ok, 0 = failed       |
 | `sht45_last_read_timestamp_seconds`   | Unix time of last good read        |
 | `sht45_read_errors_total`             | Cumulative read failures           |
+| `sht45_humidity_low_percent`          | Configured lower limit (if set)    |
+| `sht45_humidity_high_percent`         | Configured upper limit (if set)    |
+| `sht45_humidity_warn_percent`         | Configured warning margin (if set) |
 
 An optional `LOCATION` env var adds a `location` label to every metric, so one
 Prometheus can scrape several sensors.
+
+## Status LED & humidity limits
+
+The Trinkey's NeoPixel shows the humidity zone at a glance: **green slow glow**
+inside the band, **amber faster glow** within `HUM_WARN` % of a limit, and
+**red blink** when out of range or the sensor can't be read.
+
+Set `HUM_LOW` / `HUM_HIGH` / `HUM_WARN` on the `exporter` service in
+`docker-compose.yml`; the exporter pushes them to the Trinkey over SCPI on every
+(re)connect. Without them, the firmware keeps the defaults from its own
+`settings.toml`. The limits are also exported as metrics so the dashboard can
+draw threshold bands.
+
+The LED is driven entirely by the firmware, independent of Prometheus or the
+exporter: the Trinkey reads the sensor on its own every `MEASURE_INTERVAL`
+seconds (`settings.toml`, clamped to 1..60), so the colour stays live even when
+nothing is polling over SCPI.

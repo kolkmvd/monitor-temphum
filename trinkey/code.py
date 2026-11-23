@@ -14,13 +14,17 @@
 #   CALC:HUM:LOW?      -> "<low_pct>"
 #   CALC:HUM:HIGH 70   -> set upper humidity threshold (%)
 #   CALC:HUM:HIGH?     -> "<high_pct>"
-#   CALC:HUM:STAT?     -> "IN" | "OUT"  (is humidity within [low, high]?)
+#   CALC:HUM:WARN 5    -> set warning margin (%) just inside each limit
+#   CALC:HUM:WARN?     -> "<warn_pct>"
+#   CALC:HUM:STAT?     -> "IN" | "WARN" | "OUT"
 #   SYST:ERR?          -> 0,"No error"
 #
-# Status LED: the onboard NeoPixel runs a green breathing "glow" (Pulse) while
-# humidity sits inside [low, high] and blinks red (Blink) when it is outside or
-# the sensor cannot be read. Thresholds live in RAM and reset to the defaults
-# (from settings.toml) on *RST or power cycle.
+# Status LED (onboard NeoPixel), driven by the last humidity reading:
+#   IN    comfort zone                     -> green, slow breathing glow
+#   WARN  within 'warn' % of a limit       -> amber, faster glow
+#   OUT   below low / above high / no read -> red blink
+# Thresholds live in RAM and reset to the settings.toml defaults on *RST or
+# power cycle; the exporter pushes docker-compose values over SCPI on connect.
 
 import os
 import time
@@ -34,8 +38,8 @@ IDN = "MYOSS,SHT45-Trinkey,0001,1.0"
 
 
 def _env_float(name, fallback):
-    # os.getenv() returns str for settings.toml ints since CircuitPython 10.2.0,
-    # so parse defensively instead of assuming a numeric type.
+    # os.getenv() returns str for settings.toml ints since CircuitPython
+    # 10.2.0, so parse defensively instead of assuming a numeric type.
     value = os.getenv(name)
     try:
         return float(value)
@@ -43,16 +47,25 @@ def _env_float(name, fallback):
         return fallback
 
 
-# Power-on defaults from settings.toml; overridable at runtime over SCPI.
+# Power-on defaults from settings.toml; overridable at runtime over SCPI
+# (the exporter pushes HUM_LOW/HIGH/WARN from docker-compose on connect).
 DEFAULT_HUM_LOW = _env_float("HUM_LOW_DEFAULT", 40.0)
 DEFAULT_HUM_HIGH = _env_float("HUM_HIGH_DEFAULT", 70.0)
+DEFAULT_HUM_WARN = _env_float("HUM_WARN_DEFAULT", 5.0)  # warning margin (%)
 
-GLOW_COLOR = (0, 80, 0)  # peak green of the breathing glow
-ALARM_COLOR = (40, 0, 0)  # red alarm blink
-GLOW_PERIOD = 3.0  # seconds per full breath
-GLOW_SPEED = 0.02  # glow animation step (s)
+GLOW_COLOR = (0, 80, 0)  # comfort zone: green
+WARN_COLOR = (90, 60, 0)  # warning zone (near a limit): amber/yellow
+ALARM_COLOR = (40, 0, 0)  # out of range: red
+GLOW_PERIOD = 3.0  # green breath length (s)
+WARN_PERIOD = 0.8  # amber breath length (s) -- faster = more urgent
+GLOW_SPEED = 0.02  # green glow animation step (s)
+WARN_SPEED = 0.02  # amber glow animation step (s)
 BLINK_SPEED = 0.3  # red on/off step (s)
-MEASURE_PERIOD = 1.0  # seconds between background sensor reads
+
+# Background sensor read interval (s), from settings.toml. Independent of SCPI:
+# the LED refreshes on its own. Clamped to 1..60 so it always reads at least
+# once a minute, even when nothing is polling over SCPI.
+MEASURE_PERIOD = max(1.0, min(_env_float("MEASURE_INTERVAL", 5.0), 60.0))
 
 # Prefer the dedicated data port; fall back to the console if data is disabled.
 serial = usb_cdc.data if usb_cdc.data is not None else usb_cdc.console
@@ -70,9 +83,12 @@ try:
     _glow = Pulse(
         _pixel, speed=GLOW_SPEED, color=GLOW_COLOR, period=GLOW_PERIOD
     )
+    _warn = Pulse(
+        _pixel, speed=WARN_SPEED, color=WARN_COLOR, period=WARN_PERIOD
+    )
     _alarm = Blink(_pixel, speed=BLINK_SPEED, color=ALARM_COLOR)
 except Exception:  # pragma: no cover - hardware/library optional
-    _pixel = _glow = _alarm = None
+    _pixel = _glow = _warn = _alarm = None
 
 i2c = board.I2C()
 sht = adafruit_sht4x.SHT4x(i2c)
@@ -81,6 +97,7 @@ sht.mode = adafruit_sht4x.Mode.NOHEAT_HIGHPRECISION
 # Mutable runtime state.
 hum_low = DEFAULT_HUM_LOW
 hum_high = DEFAULT_HUM_HIGH
+hum_warn = DEFAULT_HUM_WARN
 _last_temp = None
 _last_hum = None  # None = no valid reading yet / sensor error
 
@@ -95,23 +112,31 @@ def _read():
     return t, h
 
 
-def _in_range(h):
-    return hum_low <= h <= hum_high
+def _zone(h):
+    """Classify humidity: 'IN' (comfort), 'WARN' (near a limit) or 'OUT'."""
+    if h is None or h < hum_low or h > hum_high:
+        return "OUT"
+    if h < hum_low + hum_warn or h > hum_high - hum_warn:
+        return "WARN"
+    return "IN"
 
 
 def _update_indicator():
     """Animate the NeoPixel from the last cached humidity reading."""
     if _pixel is None:
         return
-    if _last_hum is not None and _in_range(_last_hum):
+    zone = _zone(_last_hum)
+    if zone == "IN":
         _glow.animate()
+    elif zone == "WARN":
+        _warn.animate()
     else:
         _alarm.animate()
 
 
 def handle(line):
     """Return the response for one SCPI line, or None for no response."""
-    global hum_low, hum_high
+    global hum_low, hum_high, hum_warn
 
     parts = line.split(None, 1)
     header = parts[0].upper()
@@ -120,7 +145,9 @@ def handle(line):
     if header in ("*IDN?", "*IDN"):
         return IDN
     if header == "*RST":
-        hum_low, hum_high = DEFAULT_HUM_LOW, DEFAULT_HUM_HIGH
+        hum_low = DEFAULT_HUM_LOW
+        hum_high = DEFAULT_HUM_HIGH
+        hum_warn = DEFAULT_HUM_WARN
         return None
     if header == "*CLS":
         return None
@@ -139,16 +166,19 @@ def handle(line):
         return "{:.2f}".format(hum_low)
     if header in ("CALC:HUM:HIGH?", "CALCULATE:HUM:HIGH?"):
         return "{:.2f}".format(hum_high)
+    if header in ("CALC:HUM:WARN?", "CALCULATE:HUM:WARN?"):
+        return "{:.2f}".format(hum_warn)
     if header in ("CALC:HUM:STAT?", "CALC:HUM:STATE?"):
-        if _last_hum is None:
-            return "OUT"
-        return "IN" if _in_range(_last_hum) else "OUT"
+        return _zone(_last_hum)
 
     if header in ("CALC:HUM:LOW", "CALCULATE:HUM:LOW"):
         hum_low = _parse_pct(arg)
         return None
     if header in ("CALC:HUM:HIGH", "CALCULATE:HUM:HIGH"):
         hum_high = _parse_pct(arg)
+        return None
+    if header in ("CALC:HUM:WARN", "CALCULATE:HUM:WARN"):
+        hum_warn = _parse_pct(arg)
         return None
 
     if header in ("SYST:ERR?", "SYSTEM:ERROR?"):

@@ -66,6 +66,11 @@ services:
       - SCPI_PORT=/dev/serial/by-id/usb-Adafruit_SHT4x_Trinkey_XXXX-if02
       - POLL_INTERVAL=5
       - LOCATION=serverroom
+      # Humidity limits (%), pushed to the Trinkey on connect; they drive the
+      # status LED (green inside, amber within WARN of a limit, red outside).
+      - HUM_LOW=40
+      - HUM_HIGH=70
+      - HUM_WARN=5
     volumes:
       - /dev:/dev
     device_cgroup_rules:

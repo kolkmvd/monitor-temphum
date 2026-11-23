@@ -21,18 +21,27 @@ nothing.
 
 ### Humidity thresholds (status LED)
 
-The onboard NeoPixel glows **green** while humidity is inside `[low, high]` and
-blinks **red** when it is outside (or the sensor cannot be read). Thresholds are
-set commands (no `?`); they live in RAM and reset to `40 / 70` on `*RST` or
-power cycle.
+The onboard NeoPixel reflects the latest humidity in three zones:
 
-| Command             | Response        | Notes                               |
-|---------------------|-----------------|-------------------------------------|
-| `CALC:HUM:LOW 40`   | _(none)_        | Set lower threshold (%), 0..100     |
-| `CALC:HUM:LOW?`     | `<low_pct>`     | Query lower threshold               |
-| `CALC:HUM:HIGH 70`  | _(none)_        | Set upper threshold (%), 0..100     |
-| `CALC:HUM:HIGH?`    | `<high_pct>`    | Query upper threshold               |
-| `CALC:HUM:STAT?`    | `IN` \| `OUT`   | Is the latest humidity in range?    |
+| Zone   | Condition                                 | LED                     |
+|--------|-------------------------------------------|-------------------------|
+| `IN`   | `low + warn ≤ h ≤ high - warn`            | green, slow glow        |
+| `WARN` | within `warn` % of `low` or `high`        | amber, faster glow      |
+| `OUT`  | `h < low`, `h > high`, or no valid read   | red, blinking           |
+
+Thresholds are set commands (no `?`); they live in RAM and reset to the
+settings.toml defaults (`40 / 70 / 5`) on `*RST` or power cycle. When the
+exporter runs with `HUM_LOW/HIGH/WARN`, it pushes them on connect.
+
+| Command             | Response              | Notes                         |
+|---------------------|-----------------------|-------------------------------|
+| `CALC:HUM:LOW 40`   | _(none)_              | Set lower threshold (%), 0..100 |
+| `CALC:HUM:LOW?`     | `<low_pct>`           | Query lower threshold         |
+| `CALC:HUM:HIGH 70`  | _(none)_              | Set upper threshold (%), 0..100 |
+| `CALC:HUM:HIGH?`    | `<high_pct>`          | Query upper threshold         |
+| `CALC:HUM:WARN 5`   | _(none)_              | Set warning margin (%), 0..100 |
+| `CALC:HUM:WARN?`    | `<warn_pct>`          | Query warning margin          |
+| `CALC:HUM:STAT?`    | `IN` \| `WARN` \| `OUT` | Current zone of latest reading |
 
 Unknown headers return `-113,"Undefined header"`. A bad/missing argument or a
 measurement exception returns `-100,"<message>"`.

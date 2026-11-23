@@ -2,8 +2,8 @@
 
 The Trinkey exposes a USB CDC serial port and answers SCPI queries such as
 ``MEAS?`` (returns ``<temperature_c>,<humidity_pct>``). This exporter polls the
-device on a fixed interval and publishes the readings as Prometheus gauges on an
-HTTP ``/metrics`` endpoint.
+device on a fixed interval and publishes the readings as Prometheus gauges on
+an HTTP ``/metrics`` endpoint.
 
 Configuration is via environment variables (see .env.example):
 
@@ -13,6 +13,13 @@ Configuration is via environment variables (see .env.example):
     POLL_INTERVAL   seconds between reads          (default 5.0)
     EXPORTER_PORT   HTTP port for /metrics         (default 9101)
     LOCATION        optional 'location' label value
+    HUM_LOW         lower humidity limit (%)       (optional)
+    HUM_HIGH        upper humidity limit (%)       (optional)
+    HUM_WARN        warning margin inside limit (%) (optional)
+
+When HUM_LOW/HIGH/WARN are set they are pushed to the Trinkey over SCPI on every
+(re)connect, so the status LED follows docker-compose configuration. Leave them
+empty to keep the firmware's own settings.toml defaults.
 """
 
 import logging
@@ -36,6 +43,17 @@ POLL_INTERVAL = float(os.getenv("POLL_INTERVAL", "5.0"))
 EXPORTER_PORT = int(os.getenv("EXPORTER_PORT", "9101"))
 LOCATION = os.getenv("LOCATION", "").strip()
 
+
+def _opt_float(name):
+    """Return an env var as float, or None if unset/empty."""
+    raw = os.getenv(name, "").strip()
+    return float(raw) if raw else None
+
+
+HUM_LOW = _opt_float("HUM_LOW")
+HUM_HIGH = _opt_float("HUM_HIGH")
+HUM_WARN = _opt_float("HUM_WARN")
+
 _LABELS = {"location": LOCATION} if LOCATION else {}
 _LABELNAMES = list(_LABELS.keys())
 
@@ -54,6 +72,17 @@ last_read = Gauge(
 read_errors = Counter(
     "sht45_read_errors_total", "Number of failed SCPI reads", _LABELNAMES
 )
+hum_low_g = Gauge(
+    "sht45_humidity_low_percent", "Configured lower humidity limit", _LABELNAMES
+)
+hum_high_g = Gauge(
+    "sht45_humidity_high_percent", "Configured upper humidity limit", _LABELNAMES
+)
+hum_warn_g = Gauge(
+    "sht45_humidity_warn_percent",
+    "Configured warning margin inside each limit",
+    _LABELNAMES,
+)
 
 
 def _m(metric):
@@ -64,10 +93,11 @@ def _m(metric):
 class SCPIDevice:
     """Thread-safe SCPI serial client with lazy (re)connect."""
 
-    def __init__(self, port, baud, timeout):
+    def __init__(self, port, baud, timeout, on_connect=None):
         self.port = port
         self.baud = baud
         self.timeout = timeout
+        self._on_connect = on_connect
         self._serial = None
         self._lock = threading.Lock()
 
@@ -75,9 +105,13 @@ class SCPIDevice:
         if self._serial is not None and self._serial.is_open:
             return
         LOG.info("opening serial port %s @ %d", self.port, self.baud)
-        self._serial = serial.Serial(self.port, self.baud, timeout=self.timeout)
+        self._serial = serial.Serial(
+            self.port, self.baud, timeout=self.timeout
+        )
         time.sleep(0.2)  # let the CDC link settle
         self._serial.reset_input_buffer()
+        if self._on_connect is not None:
+            self._on_connect(self)
 
     def query(self, command):
         with self._lock:
@@ -88,6 +122,11 @@ class SCPIDevice:
             if not line:
                 raise TimeoutError("no response to {!r}".format(command))
             return line
+
+    def write_cmd(self, command):
+        """Send a set command (no response). Assumes a live link."""
+        self._serial.write((command + "\n").encode("ascii"))
+        time.sleep(0.05)  # let the firmware consume the line
 
     def close(self):
         if self._serial is not None and self._serial.is_open:
@@ -106,10 +145,43 @@ def poll_once(device):
     LOG.debug("temp=%.2f C humidity=%.2f %%", t, h)
 
 
+def _threshold_commands():
+    """SCPI set commands for the configured thresholds (skipping unset ones)."""
+    cmds = []
+    if HUM_LOW is not None:
+        cmds.append("CALC:HUM:LOW {:.2f}".format(HUM_LOW))
+    if HUM_HIGH is not None:
+        cmds.append("CALC:HUM:HIGH {:.2f}".format(HUM_HIGH))
+    if HUM_WARN is not None:
+        cmds.append("CALC:HUM:WARN {:.2f}".format(HUM_WARN))
+    return cmds
+
+
+def push_config(device):
+    """Push configured thresholds to the Trinkey (runs on every reconnect)."""
+    cmds = _threshold_commands()
+    for cmd in cmds:
+        device.write_cmd(cmd)
+    if cmds:
+        LOG.info("pushed thresholds: %s", ", ".join(cmds))
+
+
+def _publish_threshold_gauges():
+    if HUM_LOW is not None:
+        _m(hum_low_g).set(HUM_LOW)
+    if HUM_HIGH is not None:
+        _m(hum_high_g).set(HUM_HIGH)
+    if HUM_WARN is not None:
+        _m(hum_warn_g).set(HUM_WARN)
+
+
 def main():
     start_http_server(EXPORTER_PORT)
     LOG.info("exporter listening on :%d/metrics", EXPORTER_PORT)
-    device = SCPIDevice(SCPI_PORT, SCPI_BAUD, SCPI_TIMEOUT)
+    _publish_threshold_gauges()
+    device = SCPIDevice(
+        SCPI_PORT, SCPI_BAUD, SCPI_TIMEOUT, on_connect=push_config
+    )
     _m(up).set(0)
 
     while True:

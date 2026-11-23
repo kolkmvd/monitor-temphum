@@ -4,3 +4,10 @@
 # *RST or power cycle.
 HUM_LOW_DEFAULT = 40
 HUM_HIGH_DEFAULT = 70
+# Warning margin (%) just inside each limit: amber faster glow in that band.
+HUM_WARN_DEFAULT = 5
+
+# Background sensor read interval in seconds. The firmware reads the sensor on
+# this interval regardless of SCPI/exporter activity, so the status LED stays
+# live on its own. Clamped to 1..60, so it always reads at least once a minute.
+MEASURE_INTERVAL = 5
