@@ -26,6 +26,7 @@
 # Thresholds live in RAM and reset to the settings.toml defaults on *RST or
 # power cycle; the exporter pushes docker-compose values over SCPI on connect.
 
+import math
 import os
 import time
 
@@ -58,9 +59,8 @@ WARN_COLOR = (90, 60, 0)  # warning zone (near a limit): amber/yellow
 ALARM_COLOR = (40, 0, 0)  # out of range: red
 GLOW_PERIOD = 3.0  # green breath length (s)
 WARN_PERIOD = 0.8  # amber breath length (s) -- faster = more urgent
-GLOW_SPEED = 0.02  # green glow animation step (s)
-WARN_SPEED = 0.02  # amber glow animation step (s)
-BLINK_SPEED = 0.3  # red on/off step (s)
+BLINK_PERIOD = 0.6  # red on/off cycle length (s)
+GLOW_FLOOR = 0.15  # dimmest point of a breath (0..1)
 
 # Background sensor read interval (s), from settings.toml. Independent of SCPI:
 # the LED refreshes on its own. Clamped to 1..60 so it always reads at least
@@ -71,24 +71,17 @@ MEASURE_PERIOD = max(1.0, min(_env_float("MEASURE_INTERVAL", 5.0), 60.0))
 serial = usb_cdc.data if usb_cdc.data is not None else usb_cdc.console
 serial.timeout = 0  # non-blocking reads; we drive timing via in_waiting
 
-# Optional status LED + animations (present on the SHT4x Trinkey).
+# Optional status LED (present on the SHT4x Trinkey). The breathing glow is
+# done by hand with a sine on the brightness -- no adafruit_led_animation, which
+# does not fit the SAMD21 Trinkey's tiny (~50 kB) filesystem.
 try:
     import neopixel
-    from adafruit_led_animation.animation.blink import Blink
-    from adafruit_led_animation.animation.pulse import Pulse
 
     _pixel = neopixel.NeoPixel(
-        board.NEOPIXEL, 1, brightness=0.3, auto_write=False
+        board.NEOPIXEL, 1, brightness=0.3, auto_write=True
     )
-    _glow = Pulse(
-        _pixel, speed=GLOW_SPEED, color=GLOW_COLOR, period=GLOW_PERIOD
-    )
-    _warn = Pulse(
-        _pixel, speed=WARN_SPEED, color=WARN_COLOR, period=WARN_PERIOD
-    )
-    _alarm = Blink(_pixel, speed=BLINK_SPEED, color=ALARM_COLOR)
-except Exception:  # pragma: no cover - hardware/library optional
-    _pixel = _glow = _warn = _alarm = None
+except Exception:  # pragma: no cover - hardware optional
+    _pixel = None
 
 i2c = board.I2C()
 sht = adafruit_sht4x.SHT4x(i2c)
@@ -121,17 +114,57 @@ def _zone(h):
     return "IN"
 
 
-def _update_indicator():
-    """Animate the NeoPixel from the last cached humidity reading."""
+def _pixel_set(color):
+    if _pixel is not None:
+        _pixel[0] = color
+
+
+def _scale(color, level):
+    return (
+        int(color[0] * level),
+        int(color[1] * level),
+        int(color[2] * level),
+    )
+
+
+def _breathe(now, color, period):
+    """Pulse `color` smoothly via a sine on the brightness level."""
+    phase = (math.sin(now * (2 * math.pi / period)) + 1) / 2
+    _pixel_set(_scale(color, GLOW_FLOOR + (1 - GLOW_FLOOR) * phase))
+
+
+def _update_indicator(now):
+    """Drive the NeoPixel from the last cached humidity reading."""
     if _pixel is None:
         return
     zone = _zone(_last_hum)
     if zone == "IN":
-        _glow.animate()
+        _breathe(now, GLOW_COLOR, GLOW_PERIOD)
     elif zone == "WARN":
-        _warn.animate()
+        _breathe(now, WARN_COLOR, WARN_PERIOD)
     else:
-        _alarm.animate()
+        on = (now % BLINK_PERIOD) < (BLINK_PERIOD / 2)
+        _pixel_set(ALARM_COLOR if on else (0, 0, 0))
+
+
+def _kw_match(spec, token):
+    """True if `token` is a valid SCPI abbreviation of keyword `spec`.
+
+    `spec` is written with the mandatory short form in UPPERCASE and the
+    optional long-form tail in lowercase, e.g. "MEASure" (short form "MEAS").
+    A token matches when it is a prefix of the full keyword and at least as
+    long as the short form -- so "MEAS", "MEASU".."MEASURE" all match.
+    """
+    short = "".join(c for c in spec if c.isupper())
+    full = spec.upper()
+    return full.startswith(token) and len(token) >= len(short)
+
+
+def _match(tokens, *spec):
+    """True if the colon-split header `tokens` matches keyword specs `spec`."""
+    return len(tokens) == len(spec) and all(
+        _kw_match(s, t) for s, t in zip(spec, tokens)
+    )
 
 
 def handle(line):
@@ -139,49 +172,57 @@ def handle(line):
     global hum_low, hum_high, hum_warn
 
     parts = line.split(None, 1)
-    header = parts[0].upper()
+    head = parts[0].upper()
     arg = parts[1].strip() if len(parts) > 1 else None
 
-    if header in ("*IDN?", "*IDN"):
+    query = head.endswith("?")
+    if query:
+        head = head[:-1]
+    tokens = head.split(":")
+
+    # IEEE 488.2 common commands (no colon hierarchy).
+    if head == "*IDN":
         return IDN
-    if header == "*RST":
+    if head == "*RST":
         hum_low = DEFAULT_HUM_LOW
         hum_high = DEFAULT_HUM_HIGH
         hum_warn = DEFAULT_HUM_WARN
         return None
-    if header == "*CLS":
+    if head == "*CLS":
         return None
 
-    if header in ("MEAS?", "MEASURE?", "READ?"):
+    # MEASure subsystem (queries only).
+    if query and (_match(tokens, "MEASure") or _match(tokens, "READ")):
         t, h = _read()
         return "{:.2f},{:.2f}".format(t, h)
-    if header in ("MEAS:TEMP?", "MEAS:TEMPERATURE?"):
+    if query and _match(tokens, "MEASure", "TEMPerature"):
         t, _ = _read()
         return "{:.2f}".format(t)
-    if header in ("MEAS:HUM?", "MEAS:HUMIDITY?"):
+    if query and _match(tokens, "MEASure", "HUMidity"):
         _, h = _read()
         return "{:.2f}".format(h)
 
-    if header in ("CALC:HUM:LOW?", "CALCULATE:HUM:LOW?"):
-        return "{:.2f}".format(hum_low)
-    if header in ("CALC:HUM:HIGH?", "CALCULATE:HUM:HIGH?"):
-        return "{:.2f}".format(hum_high)
-    if header in ("CALC:HUM:WARN?", "CALCULATE:HUM:WARN?"):
-        return "{:.2f}".format(hum_warn)
-    if header in ("CALC:HUM:STAT?", "CALC:HUM:STATE?"):
-        return _zone(_last_hum)
-
-    if header in ("CALC:HUM:LOW", "CALCULATE:HUM:LOW"):
+    # CALCulate:HUMidity thresholds (set or query share one branch).
+    if _match(tokens, "CALCulate", "HUMidity", "LOW"):
+        if query:
+            return "{:.2f}".format(hum_low)
         hum_low = _parse_pct(arg)
         return None
-    if header in ("CALC:HUM:HIGH", "CALCULATE:HUM:HIGH"):
+    if _match(tokens, "CALCulate", "HUMidity", "HIGH"):
+        if query:
+            return "{:.2f}".format(hum_high)
         hum_high = _parse_pct(arg)
         return None
-    if header in ("CALC:HUM:WARN", "CALCULATE:HUM:WARN"):
+    if _match(tokens, "CALCulate", "HUMidity", "WARN"):
+        if query:
+            return "{:.2f}".format(hum_warn)
         hum_warn = _parse_pct(arg)
         return None
+    if query and _match(tokens, "CALCulate", "HUMidity", "STATe"):
+        return _zone(_last_hum)
 
-    if header in ("SYST:ERR?", "SYSTEM:ERROR?"):
+    # SYSTem subsystem.
+    if query and _match(tokens, "SYSTem", "ERRor"):
         return '0,"No error"'
 
     return '-113,"Undefined header"'
@@ -216,7 +257,7 @@ while True:
         except Exception:
             _last_hum = None  # flag sensor error -> red alarm
 
-    _update_indicator()
+    _update_indicator(now)
 
     waiting = serial.in_waiting
     if waiting:

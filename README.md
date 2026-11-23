@@ -27,9 +27,11 @@ Temperature & humidity monitoring with **Grafana/Prometheus**, measured by an
    ```bash
    cd trinkey && ./install-libs.sh      # Trinkey plugged in, CIRCUITPY mounted
    ```
-   This installs `adafruit_sht4x`, `neopixel` and `adafruit_led_animation` into
-   `CIRCUITPY/lib/`. (Manual alternative: copy those from the matching
-   [Adafruit CircuitPython Bundle](https://circuitpython.org/libraries).)
+   This installs `adafruit_sht4x` and `neopixel` into `CIRCUITPY/lib/`. (Manual
+   alternative: copy those from the matching
+   [Adafruit CircuitPython Bundle](https://circuitpython.org/libraries).) The
+   status-LED glow is hand-rolled in `code.py`, so no animation library is
+   needed — `adafruit_led_animation` does not fit the Trinkey's small flash.
 3. Copy `trinkey/boot.py`, `trinkey/code.py` and `trinkey/settings.toml` to the
    root of `CIRCUITPY`. Edit `settings.toml` to set the default humidity
    thresholds (`HUM_LOW_DEFAULT` / `HUM_HIGH_DEFAULT`).

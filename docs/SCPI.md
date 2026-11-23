@@ -46,9 +46,11 @@ exporter runs with `HUM_LOW/HIGH/WARN`, it pushes them on connect.
 Unknown headers return `-113,"Undefined header"`. A bad/missing argument or a
 measurement exception returns `-100,"<message>"`.
 
-Keywords are case-insensitive. Both long and short forms are accepted
-(`MEAS?` / `MEASURE?`, `MEAS:TEMP?` / `MEAS:TEMPERATURE?`,
-`CALC:…` / `CALCULATE:…`).
+Keywords are case-insensitive and follow the SCPI short/long-form convention:
+each keyword matches from its fixed short form up to the full word. Short forms
+are `MEAS`, `CALC`, `HUM`, `TEMP`, `STAT`, `SYST`, `ERR` (4 chars where the full
+word is longer). So `MEAS?`, `MEASURE?` and anything in between work, as does
+`CALC:HUM:LOW?` or `CALCULATE:HUMIDITY:LOW?`; shorter stubs like `MEA?` do not.
 
 ## Manual test
 
