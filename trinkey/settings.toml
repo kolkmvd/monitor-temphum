@@ -1,0 +1,6 @@
+# CircuitPython settings.toml -- read by code.py via os.getenv().
+# Default humidity thresholds (%) for the status LED. These are the power-on
+# defaults; they can be overridden at runtime over SCPI and are restored on
+# *RST or power cycle.
+HUM_LOW_DEFAULT = 40
+HUM_HIGH_DEFAULT = 70

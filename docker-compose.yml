@@ -1,0 +1,76 @@
+# monitor-temphum -- Prometheus + Grafana for the SHT45 SCPI sensor.
+#
+# Default layout (works on Windows/macOS Docker Desktop AND Linux):
+#   - Prometheus + Grafana run in containers.
+#   - The SCPI exporter runs on the HOST (it needs the USB serial port, which
+#     Docker Desktop cannot pass through). Start it with:
+#         cd exporter && pip install -r requirements.txt
+#         SCPI_PORT=COM5 python scpi_exporter.py      # Windows
+#         SCPI_PORT=/dev/ttyACM1 python scpi_exporter.py   # Linux/macOS
+#     Prometheus scrapes it via host.docker.internal:9101 (see prometheus.yml).
+#
+# Linux-only alternative: uncomment the 'exporter' service below and set the
+# Prometheus target to 'exporter:9101' instead of host.docker.internal.
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: temphum-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    extra_hosts:
+      # Lets the container reach a host-run exporter on Linux too.
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: temphum-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  # Exporter in a container with USB passthrough (Linux host).
+  #
+  # Hot-plug friendly: instead of pinning one device node (which goes stale when
+  # a replug renumbers ttyACMx), we mount the /dev tree so new nodes + by-id
+  # symlinks appear live, and allow any ttyACM (major 166) via cgroup. The
+  # exporter opens the stable by-id path and reconnects on its own after an
+  # unplug -- no container restart or recreate needed.
+  #
+  # Fill in your Trinkey's serial: `ls -l /dev/serial/by-id/` (the '-if02' entry
+  # is the data/SCPI port).
+  #
+  # Trade-off: mounting /dev makes all host device nodes *visible* to the
+  # container, but the cgroup rule still only grants *access* to ttyACM devices.
+  exporter:
+    build: ./exporter
+    container_name: temphum-exporter
+    restart: unless-stopped
+    ports:
+      - "9101:9101"
+    environment:
+      - SCPI_PORT=/dev/serial/by-id/usb-Adafruit_SHT4x_Trinkey_XXXX-if02
+      - POLL_INTERVAL=5
+      - LOCATION=serverroom
+    volumes:
+      - /dev:/dev
+    device_cgroup_rules:
+      - "c 166:* rmw"
+
+volumes:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: sht45
+    static_configs:
+      # Exporter runs as a compose service with USB passthrough.
+      - targets: ["exporter:9101"]
+      # Alternative (exporter runs on the host, e.g. Windows/macOS):
+      # - targets: ["host.docker.internal:9101"]

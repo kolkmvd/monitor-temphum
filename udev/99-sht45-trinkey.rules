@@ -1,0 +1,27 @@
+# udev rule: give the SHT45 Trinkey's SCPI (data) serial port a stable name.
+#
+# Result: /dev/sht45 always points at the data CDC port, regardless of plug
+# order or how many other serial devices are present.
+#
+# --- Install -------------------------------------------------------------
+#   1. Discover the product id and serial of YOUR Trinkey:
+#        udevadm info -a -n /dev/ttyACM0 | grep -E 'idVendor|idProduct|serial'
+#      (or: lsusb -v -d 239a: | grep -E 'idProduct|iSerial')
+#   2. Fill in idProduct and serial below.
+#   3. sudo cp 99-sht45-trinkey.rules /etc/udev/rules.d/
+#      sudo udevadm control --reload && sudo udevadm trigger
+#   4. Replug the Trinkey; `ls -l /dev/sht45` should appear.
+#
+# Notes:
+#   * idVendor 239a = Adafruit. Fill in idProduct for the SHT4x Trinkey.
+#   * ENV{ID_USB_INTERFACE_NUM}=="02" selects the DATA port (SCPI). The console
+#     port is interface "00". If boot.py uses console=False/data=True there is
+#     only one port -- drop the interface match then.
+#   * GROUP/MODE make the port readable without root; adjust to taste.
+
+SUBSYSTEM=="tty", \
+  ATTRS{idVendor}=="239a", \
+  ATTRS{idProduct}=="XXXX", \
+  ATTRS{serial}=="XXXXXXXXXXXX", \
+  ENV{ID_USB_INTERFACE_NUM}=="02", \
+  SYMLINK+="sht45", GROUP="dialout", MODE="0660"

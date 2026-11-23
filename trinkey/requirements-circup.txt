@@ -1,0 +1,6 @@
+# CircuitPython libraries for the SHT45 Trinkey, installed with `circup`.
+# circup resolves transitive dependencies automatically (e.g. adafruit_sht4x
+# pulls in adafruit_bus_device).
+adafruit_sht4x
+neopixel
+adafruit_led_animation
