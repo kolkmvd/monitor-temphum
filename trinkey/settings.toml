@@ -1,11 +1,14 @@
-# CircuitPython settings.toml -- read by code.py via os.getenv().
-# Default humidity thresholds (%) for the status LED. These are the power-on
+# settings.toml -- parsed directly by app.py (os.getenv is not built into the
+# SAMD21 firmware). Default humidity thresholds (%) for the status LED; power-on
 # defaults; they can be overridden at runtime over SCPI and are restored on
 # *RST or power cycle.
-HUM_LOW_DEFAULT = 40
+HUM_LOW_DEFAULT = 35
 HUM_HIGH_DEFAULT = 70
 # Warning margin (%) just inside each limit: amber faster glow in that band.
 HUM_WARN_DEFAULT = 5
+
+# Status-LED brightness, 0.0 (off) .. 1.0 (full). Scales all colours.
+BRIGHTNESS = 0.2
 
 # Background sensor read interval in seconds. The firmware reads the sensor on
 # this interval regardless of SCPI/exporter activity, so the status LED stays

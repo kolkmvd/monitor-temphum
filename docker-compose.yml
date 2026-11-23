@@ -68,9 +68,10 @@ services:
       - LOCATION=serverroom
       # Humidity limits (%), pushed to the Trinkey on connect; they drive the
       # status LED (green inside, amber within WARN of a limit, red outside).
-      - HUM_LOW=40
+      - HUM_LOW=35
       - HUM_HIGH=70
       - HUM_WARN=5
+      - BRIGHTNESS=0.2   # status-LED brightness 0..1
     volumes:
       - /dev:/dev
     device_cgroup_rules:

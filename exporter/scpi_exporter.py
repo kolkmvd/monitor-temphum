@@ -16,10 +16,11 @@ Configuration is via environment variables (see .env.example):
     HUM_LOW         lower humidity limit (%)       (optional)
     HUM_HIGH        upper humidity limit (%)       (optional)
     HUM_WARN        warning margin inside limit (%) (optional)
+    BRIGHTNESS      status-LED brightness 0..1     (optional)
 
-When HUM_LOW/HIGH/WARN are set they are pushed to the Trinkey over SCPI on every
-(re)connect, so the status LED follows docker-compose configuration. Leave them
-empty to keep the firmware's own settings.toml defaults.
+When HUM_LOW/HIGH/WARN/BRIGHTNESS are set they are pushed to the Trinkey over
+SCPI on every (re)connect, so the status LED follows docker-compose config.
+Leave them empty to keep the firmware's own settings.toml defaults.
 """
 
 import logging
@@ -53,6 +54,7 @@ def _opt_float(name):
 HUM_LOW = _opt_float("HUM_LOW")
 HUM_HIGH = _opt_float("HUM_HIGH")
 HUM_WARN = _opt_float("HUM_WARN")
+BRIGHT = _opt_float("BRIGHTNESS")
 
 _LABELS = {"location": LOCATION} if LOCATION else {}
 _LABELNAMES = list(_LABELS.keys())
@@ -73,10 +75,14 @@ read_errors = Counter(
     "sht45_read_errors_total", "Number of failed SCPI reads", _LABELNAMES
 )
 hum_low_g = Gauge(
-    "sht45_humidity_low_percent", "Configured lower humidity limit", _LABELNAMES
+    "sht45_humidity_low_percent",
+    "Configured lower humidity limit",
+    _LABELNAMES,
 )
 hum_high_g = Gauge(
-    "sht45_humidity_high_percent", "Configured upper humidity limit", _LABELNAMES
+    "sht45_humidity_high_percent",
+    "Configured upper humidity limit",
+    _LABELNAMES,
 )
 hum_warn_g = Gauge(
     "sht45_humidity_warn_percent",
@@ -146,7 +152,7 @@ def poll_once(device):
 
 
 def _threshold_commands():
-    """SCPI set commands for the configured thresholds (skipping unset ones)."""
+    """SCPI set commands for the configured settings (skipping unset ones)."""
     cmds = []
     if HUM_LOW is not None:
         cmds.append("CALC:HUM:LOW {:.2f}".format(HUM_LOW))
@@ -154,6 +160,8 @@ def _threshold_commands():
         cmds.append("CALC:HUM:HIGH {:.2f}".format(HUM_HIGH))
     if HUM_WARN is not None:
         cmds.append("CALC:HUM:WARN {:.2f}".format(HUM_WARN))
+    if BRIGHT is not None:
+        cmds.append("DISP:BRIG {:.2f}".format(BRIGHT))
     return cmds
 
 
