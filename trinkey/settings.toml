@@ -17,7 +17,7 @@ BRIGHTNESS = 0.2
 TEMP_OFFSET = -3.0
 HUM_OFFSET = 5.7
 
-# Background sensor read interval in seconds. The firmware reads the sensor on
-# this interval regardless of SCPI/exporter activity, so the status LED stays
-# live on its own. Clamped to 1..60, so it always reads at least once a minute.
-MEASURE_INTERVAL = 5
+# Background sensor read interval in seconds: a fallback that keeps the status
+# LED live when nothing polls over SCPI (the exporter's own poll refreshes it
+# every few seconds regardless). Clamped to 1..3600.
+MEASURE_INTERVAL = 300

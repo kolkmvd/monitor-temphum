@@ -60,8 +60,9 @@ LOW = _envf("HUM_LOW_DEFAULT", 35.0)
 HIGH = _envf("HUM_HIGH_DEFAULT", 70.0)
 WARN = _envf("HUM_WARN_DEFAULT", 5.0)
 DEFAULTS = (LOW, HIGH, WARN)
-# Background read interval; clamped so the LED refreshes >=1x/min without SCPI.
-PERIOD = max(1.0, min(_envf("MEASURE_INTERVAL", 5.0), 60.0))
+# Background read interval (s): a fallback that refreshes the status LED when
+# nothing polls over SCPI (the exporter's poll refreshes it anyway). 1..3600.
+PERIOD = max(1.0, min(_envf("MEASURE_INTERVAL", 5.0), 3600.0))
 BRIGHT = max(0.0, min(_envf("BRIGHTNESS", 0.2), 1.0))  # LED brightness 0..1
 DEF_BRIGHT = BRIGHT
 # Calibration vs a trusted reference next to the Trinkey. TEMP_OFFSET (degC) is
@@ -76,7 +77,7 @@ GREEN = (0, 255, 0)
 AMBER = (255, 170, 0)
 RED = (255, 0, 0)
 # Blink patterns per zone: (seconds on, seconds off).
-GREEN_ON, GREEN_OFF = 3.0, 1.0   # IN: slow blink
+GREEN_ON, GREEN_OFF = 0.1, 3.9   # IN: brief heartbeat pulse
 AMBER_ON, AMBER_OFF = 1.0, 0.5   # WARN: medium blink (between green and red)
 RED_ON, RED_OFF = 0.3, 0.3       # OUT: fast blink
 
@@ -108,8 +109,8 @@ def read():
     global hum, raw_t, raw_h
     raw_t, raw_h = sht.measurements  # raw; sensor sits by the MCU, reads warm
     tc = raw_t + TEMP_OFFSET
-    # Same water vapour at the corrected (cooler) temperature -> RH shifts along
-    # the saturation curve; HUM_OFFSET adds any residual sensor bias.
+    # Same water vapour at the corrected (cooler) temp -> RH shifts along the
+    # saturation curve; HUM_OFFSET adds any residual sensor bias.
     h = raw_h * _psat(raw_t) / _psat(tc) + HUM_OFFSET
     hum = 0.0 if h < 0 else 100.0 if h > 100 else h
     return tc, hum
@@ -271,7 +272,7 @@ def run():
         indicate(now)
         n = serial.in_waiting
         if n:
-            # Accept CR, LF or CRLF as line endings (CRLF -> empty line, skipped)
+            # Accept CR, LF or CRLF as line endings (CRLF -> empty, skipped)
             buf += serial.read(n).replace(b"\r", b"\n")
             while b"\n" in buf:
                 ln, buf = buf.split(b"\n", 1)
