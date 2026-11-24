@@ -7,11 +7,11 @@
 #
 # Uses adafruit_sht4x + neopixel, which are FROZEN into the Trinkey firmware
 # (no install needed, negligible RAM). neopixel's own `brightness` is used.
-# Commands: *IDN? *RST *CLS  MEAS? MEAS:TEMP? MEAS:HUM?
+# Commands: *IDN? *RST *CLS  MEAS? MEAS:TEMP? MEAS:HUM? MEAS:RAW?
 #   CALC:HUM:LOW|HIGH|WARN <v> (set) / ...? (query)  CALC:HUM:STAT?
 #   CAL:TEMP:OFFS <degC> / CAL:HUM:OFFS <%RH>  (calibration; + ? to query)
 #   DISP:BRIG <0..1> (LED brightness) / DISP:BRIG?    SYST:ERR?
-# LED: green glow in band, amber faster glow near a limit, red blink outside.
+# LED blink: green slow (in band), amber medium (near a limit), red fast (out).
 # Keywords abbreviate per SCPI (UPPER part is the short form).
 
 import gc
@@ -94,7 +94,9 @@ try:
 except Exception:
     _pixel = None
 
-hum = None  # last humidity; None = no reading / sensor error
+hum = None   # last calibrated humidity; None = no reading / sensor error
+raw_t = None  # last raw (uncalibrated) temperature
+raw_h = None  # last raw (uncalibrated) humidity
 
 
 def _psat(t):
@@ -103,15 +105,14 @@ def _psat(t):
 
 
 def read():
-    global hum
-    t, h = sht.measurements  # sensor sits next to the MCU -> reads warm
-    tc = t + TEMP_OFFSET
+    global hum, raw_t, raw_h
+    raw_t, raw_h = sht.measurements  # raw; sensor sits by the MCU, reads warm
+    tc = raw_t + TEMP_OFFSET
     # Same water vapour at the corrected (cooler) temperature -> RH shifts along
     # the saturation curve; HUM_OFFSET adds any residual sensor bias.
-    h = h * _psat(t) / _psat(tc) + HUM_OFFSET
-    t = tc
+    h = raw_h * _psat(raw_t) / _psat(tc) + HUM_OFFSET
     hum = 0.0 if h < 0 else 100.0 if h > 100 else h
-    return t, hum
+    return tc, hum
 
 
 _last_color = None
@@ -198,6 +199,10 @@ def handle(line):
         return "%.2f" % read()[0]
     if q and _is(t, "MEASure", "HUMidity"):
         return "%.2f" % read()[1]
+    if q and _is(t, "MEASure", "RAW"):
+        if raw_t is None:
+            read()
+        return "%.2f,%.2f" % (raw_t, raw_h)
     if _is(t, "CALCulate", "HUMidity", "LOW"):
         if q:
             return "%.2f" % LOW

@@ -67,6 +67,16 @@ temperature = Gauge(
 humidity = Gauge(
     "sht45_humidity_percent", "Relative humidity in percent", _LABELNAMES
 )
+temperature_raw = Gauge(
+    "sht45_temperature_raw_celsius",
+    "Uncalibrated temperature in degrees Celsius",
+    _LABELNAMES,
+)
+humidity_raw = Gauge(
+    "sht45_humidity_raw_percent",
+    "Uncalibrated relative humidity in percent",
+    _LABELNAMES,
+)
 up = Gauge("sht45_up", "1 if the last read succeeded, else 0", _LABELNAMES)
 last_read = Gauge(
     "sht45_last_read_timestamp_seconds",
@@ -143,11 +153,14 @@ class SCPIDevice:
 
 
 def poll_once(device):
-    reply = device.query("MEAS?")
-    temp_str, hum_str = reply.split(",")
+    temp_str, hum_str = device.query("MEAS?").split(",")
     t, h = float(temp_str), float(hum_str)
     _m(temperature).set(t)
     _m(humidity).set(h)
+    # Uncalibrated reading from the same sample, for comparison in Grafana.
+    rt_str, rh_str = device.query("MEAS:RAW?").split(",")
+    _m(temperature_raw).set(float(rt_str))
+    _m(humidity_raw).set(float(rh_str))
     _m(up).set(1)
     _m(last_read).set(time.time())
     LOG.debug("temp=%.2f C humidity=%.2f %%", t, h)

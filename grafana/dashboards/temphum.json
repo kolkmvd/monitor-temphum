@@ -86,7 +86,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 } } },
       "targets": [
-        { "refId": "A", "expr": "sht45_temperature_celsius", "legendFormat": "temperature", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "refId": "A", "expr": "sht45_temperature_celsius", "legendFormat": "calibrated", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "sht45_temperature_raw_celsius", "legendFormat": "raw", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ]
     },
     {
@@ -97,7 +98,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "humidity", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 } } },
       "targets": [
-        { "refId": "A", "expr": "sht45_humidity_percent", "legendFormat": "humidity", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "refId": "A", "expr": "sht45_humidity_percent", "legendFormat": "calibrated", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "sht45_humidity_raw_percent", "legendFormat": "raw", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ]
     }
   ]
