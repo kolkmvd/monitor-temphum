@@ -237,7 +237,7 @@ def run():
             while b"\n" in buf:
                 ln, buf = buf.split(b"\n", 1)
                 try:
-                    cmd = ln.decode().strip()
+                    cmd = str(ln, "utf-8").strip()
                 except Exception:
                     cmd = ""
                 if not cmd:
@@ -246,8 +246,8 @@ def run():
                     r = handle(cmd)
                     print("SCPI <", cmd, "->", r if r is not None else "(ok)")
                     if r is not None:
-                        serial.write((r + "\n").encode())
+                        serial.write(bytes(r + "\n", "utf-8"))
                 except Exception as e:
                     print("SCPI <", cmd, "!!", e)
-                    serial.write(('-100,"%s"\n' % e).encode())
+                    serial.write(bytes('-100,"%s"\n' % e, "utf-8"))
         time.sleep(0.01)
