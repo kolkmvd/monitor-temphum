@@ -210,8 +210,14 @@ def run():
         pass
     buf = b""
     nxt = time.monotonic()
+    conn = serial.connected
+    print("data port connected:", conn)
     while True:
         now = time.monotonic()
+        c = serial.connected
+        if c != conn:
+            conn = c
+            print("data port", "connected" if c else "disconnected")
         if now >= nxt:
             nxt = now + PERIOD
             try:
