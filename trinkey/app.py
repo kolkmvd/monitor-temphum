@@ -230,8 +230,10 @@ def run():
         indicate(now)
         n = serial.in_waiting
         if n:
+            chunk = serial.read(n)
             # Accept CR, LF or CRLF as line endings (CRLF -> empty line, skipped)
-            buf += serial.read(n).replace(b"\r", b"\n")
+            buf += chunk.replace(b"\r", b"\n")
+            print("RX", n, chunk, "buf", len(buf))   # debug
             while b"\n" in buf:
                 ln, buf = buf.split(b"\n", 1)
                 try:
