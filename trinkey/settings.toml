@@ -10,6 +10,13 @@ HUM_WARN_DEFAULT = 5
 # Status-LED brightness, 0.0 (off) .. 1.0 (full). Scales all colours.
 BRIGHTNESS = 0.2
 
+# Calibration vs a trusted reference next to the Trinkey (offset = ref - trinkey).
+# TEMP_OFFSET (degC) is added to the temperature; RH is recomputed to that
+# corrected temperature along the saturation curve; HUM_OFFSET (%RH) is a
+# residual added on top for sensor-to-sensor bias.
+TEMP_OFFSET = -3.6
+HUM_OFFSET = 5.7
+
 # Background sensor read interval in seconds. The firmware reads the sensor on
 # this interval regardless of SCPI/exporter activity, so the status LED stays
 # live on its own. Clamped to 1..60, so it always reads at least once a minute.

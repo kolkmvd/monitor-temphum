@@ -9,6 +9,7 @@
 # (no install needed, negligible RAM). neopixel's own `brightness` is used.
 # Commands: *IDN? *RST *CLS  MEAS? MEAS:TEMP? MEAS:HUM?
 #   CALC:HUM:LOW|HIGH|WARN <v> (set) / ...? (query)  CALC:HUM:STAT?
+#   CAL:TEMP:OFFS <degC> / CAL:HUM:OFFS <%RH>  (calibration; + ? to query)
 #   DISP:BRIG <0..1> (LED brightness) / DISP:BRIG?    SYST:ERR?
 # LED: green glow in band, amber faster glow near a limit, red blink outside.
 # Keywords abbreviate per SCPI (UPPER part is the short form).
@@ -63,14 +64,21 @@ DEFAULTS = (LOW, HIGH, WARN)
 PERIOD = max(1.0, min(_envf("MEASURE_INTERVAL", 5.0), 60.0))
 BRIGHT = max(0.0, min(_envf("BRIGHTNESS", 0.2), 1.0))  # LED brightness 0..1
 DEF_BRIGHT = BRIGHT
+# Calibration vs a trusted reference next to the Trinkey. TEMP_OFFSET (degC) is
+# added to the temperature; RH is then recomputed to that corrected temperature
+# along the saturation curve, and HUM_OFFSET (%RH) is added for residual bias.
+TEMP_OFFSET = _envf("TEMP_OFFSET", 0.0)
+HUM_OFFSET = _envf("HUM_OFFSET", 0.0)
+DEF_TEMP_OFFSET = TEMP_OFFSET
+DEF_HUM_OFFSET = HUM_OFFSET
 
 GREEN = (0, 255, 0)
 AMBER = (255, 170, 0)
 RED = (255, 0, 0)
-GLOW_T = 3.0   # green breath (s)
-WARN_T = 0.8   # amber breath (s), faster = urgent
-BLINK_T = 0.6  # red on/off (s)
-FLOOR = 0.15   # dimmest breath level
+# Blink patterns per zone: (seconds on, seconds off).
+GREEN_ON, GREEN_OFF = 3.0, 1.0   # IN: slow blink
+AMBER_ON, AMBER_OFF = 1.0, 0.5   # WARN: medium blink (between green and red)
+RED_ON, RED_OFF = 0.3, 0.3       # OUT: fast blink
 
 serial = usb_cdc.data or usb_cdc.console
 serial.timeout = 0
@@ -89,21 +97,37 @@ except Exception:
 hum = None  # last humidity; None = no reading / sensor error
 
 
+def _psat(t):
+    # Saturation vapour pressure (Magnus); used only as a ratio.
+    return math.exp(17.62 * t / (243.12 + t))
+
+
 def read():
     global hum
-    t, h = sht.measurements  # (temperature_c, relative_humidity_pct)
+    t, h = sht.measurements  # sensor sits next to the MCU -> reads warm
+    tc = t + TEMP_OFFSET
+    # Same water vapour at the corrected (cooler) temperature -> RH shifts along
+    # the saturation curve; HUM_OFFSET adds any residual sensor bias.
+    h = h * _psat(t) / _psat(tc) + HUM_OFFSET
+    t = tc
     hum = 0.0 if h < 0 else 100.0 if h > 100 else h
     return t, hum
 
 
+_last_color = None
+
+
 def _set(c):
-    if _pixel is not None:
+    # Write only on a real change -> far fewer NeoPixel bit-bangs (less CPU and
+    # self-heating) than writing every loop.
+    global _last_color
+    if _pixel is not None and c != _last_color:
         _pixel[0] = c  # neopixel handles colour order + brightness
+        _last_color = c
 
 
-def _glow(now, c, period):
-    lvl = FLOOR + (1 - FLOOR) * (math.sin(now * 6.2831853 / period) + 1) / 2
-    _set((int(c[0] * lvl), int(c[1] * lvl), int(c[2] * lvl)))
+def _blink(now, color, on_s, off_s):
+    _set(color if (now % (on_s + off_s)) < on_s else (0, 0, 0))
 
 
 def zone(h):
@@ -119,11 +143,11 @@ def indicate(now):
         return
     z = zone(hum)
     if z == "IN":
-        _glow(now, GREEN, GLOW_T)
+        _blink(now, GREEN, GREEN_ON, GREEN_OFF)
     elif z == "WARN":
-        _glow(now, AMBER, WARN_T)
+        _blink(now, AMBER, AMBER_ON, AMBER_OFF)
     else:
-        _set(RED if (now % BLINK_T) < BLINK_T / 2 else (0, 0, 0))
+        _blink(now, RED, RED_ON, RED_OFF)
 
 
 def _ab(full, tok):
@@ -146,7 +170,7 @@ def _pct(a):
 
 
 def handle(line):
-    global LOW, HIGH, WARN, BRIGHT
+    global LOW, HIGH, WARN, BRIGHT, TEMP_OFFSET, HUM_OFFSET
     p = line.split(None, 1)
     head = p[0].upper()
     arg = p[1].strip() if len(p) > 1 else None
@@ -160,6 +184,8 @@ def handle(line):
     if head == "*RST":
         LOW, HIGH, WARN = DEFAULTS
         BRIGHT = DEF_BRIGHT
+        TEMP_OFFSET = DEF_TEMP_OFFSET
+        HUM_OFFSET = DEF_HUM_OFFSET
         if _pixel is not None:
             _pixel.brightness = BRIGHT
         return None
@@ -195,6 +221,16 @@ def handle(line):
         BRIGHT = max(0.0, min(float(arg), 1.0))
         if _pixel is not None:
             _pixel.brightness = BRIGHT
+        return None
+    if _is(t, "CALibration", "TEMPerature", "OFFSet"):
+        if q:
+            return "%.2f" % TEMP_OFFSET
+        TEMP_OFFSET = float(arg)
+        return None
+    if _is(t, "CALibration", "HUMidity", "OFFSet"):
+        if q:
+            return "%.2f" % HUM_OFFSET
+        HUM_OFFSET = float(arg)
         return None
     if q and _is(t, "SYSTem", "ERRor"):
         return '0,"No error"'
@@ -248,4 +284,4 @@ def run():
                 except Exception as e:
                     print("SCPI <", cmd, "!!", e)
                     serial.write(bytes('-100,"%s"\n' % e, "utf-8"))
-        time.sleep(0.01)
+        time.sleep(0.1)

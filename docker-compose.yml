@@ -72,6 +72,9 @@ services:
       - HUM_HIGH=70
       - HUM_WARN=5
       - BRIGHTNESS=0.2   # status-LED brightness 0..1
+      # Calibration vs a reference next to the Trinkey (offset = ref - trinkey).
+      - TEMP_OFFSET=-3.6   # degC added to temperature (self-heating)
+      - HUM_OFFSET=5.7     # %RH residual after curve compensation
     volumes:
       - /dev:/dev
     device_cgroup_rules:

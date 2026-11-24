@@ -55,6 +55,8 @@ HUM_LOW = _opt_float("HUM_LOW")
 HUM_HIGH = _opt_float("HUM_HIGH")
 HUM_WARN = _opt_float("HUM_WARN")
 BRIGHT = _opt_float("BRIGHTNESS")
+TEMP_OFFSET = _opt_float("TEMP_OFFSET")
+HUM_OFFSET = _opt_float("HUM_OFFSET")
 
 _LABELS = {"location": LOCATION} if LOCATION else {}
 _LABELNAMES = list(_LABELS.keys())
@@ -162,6 +164,10 @@ def _threshold_commands():
         cmds.append("CALC:HUM:WARN {:.2f}".format(HUM_WARN))
     if BRIGHT is not None:
         cmds.append("DISP:BRIG {:.2f}".format(BRIGHT))
+    if TEMP_OFFSET is not None:
+        cmds.append("CAL:TEMP:OFFS {:.2f}".format(TEMP_OFFSET))
+    if HUM_OFFSET is not None:
+        cmds.append("CAL:HUM:OFFS {:.2f}".format(HUM_OFFSET))
     return cmds
 
 
