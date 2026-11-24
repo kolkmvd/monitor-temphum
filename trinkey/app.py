@@ -224,7 +224,8 @@ def run():
         indicate(now)
         n = serial.in_waiting
         if n:
-            buf += serial.read(n)
+            # Accept CR, LF or CRLF as line endings (CRLF -> empty line, skipped)
+            buf += serial.read(n).replace(b"\r", b"\n")
             while b"\n" in buf:
                 ln, buf = buf.split(b"\n", 1)
                 try:
