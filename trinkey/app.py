@@ -236,8 +236,10 @@ def run():
                     continue
                 try:
                     r = handle(cmd)
+                    print("SCPI <", cmd, "->", r if r is not None else "(ok)")
                     if r is not None:
                         serial.write((r + "\n").encode())
                 except Exception as e:
+                    print("SCPI <", cmd, "!!", e)
                     serial.write(('-100,"%s"\n' % e).encode())
         time.sleep(0.01)
