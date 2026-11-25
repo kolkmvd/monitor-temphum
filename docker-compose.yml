@@ -1,16 +1,13 @@
-# monitor-temphum -- Prometheus + Grafana for the SHT45 SCPI sensor.
+# monitor-temphum -- SHT45 SCPI sensor -> Prometheus + Grafana.
 #
-# Default layout (works on Windows/macOS Docker Desktop AND Linux):
-#   - Prometheus + Grafana run in containers.
-#   - The SCPI exporter runs on the HOST (it needs the USB serial port, which
-#     Docker Desktop cannot pass through). Start it with:
-#         cd exporter && pip install -r requirements.txt
-#         SCPI_PORT=COM5 python scpi_exporter.py      # Windows
-#         SCPI_PORT=/dev/ttyACM1 python scpi_exporter.py   # Linux/macOS
-#     Prometheus scrapes it via host.docker.internal:9101 (see prometheus.yml).
+# The three services share an internal app network (temphum-app). Grafana is
+# additionally attached to an existing Traefik proxy network (webgateway) and
+# published at https://${GRAFANA_HOST}/grafana. Machine-specific values (serial
+# port, location, host) live in .env next to this file.
 #
-# Linux-only alternative: uncomment the 'exporter' service below and set the
-# Prometheus target to 'exporter:9101' instead of host.docker.internal.
+# webgateway is declared external: it must already exist (created by the Traefik
+# stack). Windows/macOS Docker Desktop can't pass USB through -- run the exporter
+# on the host there and point Prometheus at host.docker.internal:9101 instead.
 
 services:
   prometheus:
@@ -22,20 +19,22 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+    networks:
+      - temphum-app
     extra_hosts:
-      # Lets the container reach a host-run exporter on Linux too.
       - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:latest
     container_name: temphum-grafana
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Served under the /grafana sub-path behind Traefik.
+      - GF_SERVER_ROOT_URL=https://${GRAFANA_HOST}/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
       # Trim idle CPU: no alerting scheduler, no phone-home, no Live.
       - GF_UNIFIED_ALERTING_ENABLED=false
       - GF_ALERTING_ENABLED=false
@@ -45,8 +44,7 @@ services:
       - GF_LIVE_MAX_CONNECTIONS=0
       # Silence the benign app-platform search / manifest-watcher warn spam.
       - GF_LOG_FILTERS=search-manifest-watcher:error bleve-backend:error resource-search:error
-      # SQLite WAL mode: readers + writer concurrently -> far fewer "database is
-      # locked" retries (provisioning + search index both write the same DB).
+      # SQLite WAL mode: fewer "database is locked" retries.
       - GF_DATABASE_WAL=true
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
@@ -55,6 +53,17 @@ services:
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+    networks:
+      - temphum-app
+      - webgateway
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=webgateway"
+      - "traefik.http.routers.temphum-grafana.rule=Host(`${GRAFANA_HOST}`) && PathPrefix(`/grafana`)"
+      - "traefik.http.routers.temphum-grafana.entrypoints=websecure"
+      - "traefik.http.routers.temphum-grafana.tls=true"
+      - "traefik.http.routers.temphum-grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.temphum-grafana.loadbalancer.server.port=3000"
 
   # Exporter in a container with USB passthrough (Linux host).
   #
@@ -63,9 +72,6 @@ services:
   # symlinks appear live, and allow any ttyACM (major 166) via cgroup. The
   # exporter opens the stable by-id path and reconnects on its own after an
   # unplug -- no container restart or recreate needed.
-  #
-  # Fill in your Trinkey's serial: `ls -l /dev/serial/by-id/` (the '-if02' entry
-  # is the data/SCPI port).
   #
   # Trade-off: mounting /dev makes all host device nodes *visible* to the
   # container, but the cgroup rule still only grants *access* to ttyACM devices.
@@ -96,6 +102,14 @@ services:
       - /dev:/dev
     device_cgroup_rules:
       - "c 166:* rmw"
+    networks:
+      - temphum-app
+
+networks:
+  temphum-app:
+    driver: bridge
+  webgateway:
+    external: true
 
 volumes:
   prometheus-data:
