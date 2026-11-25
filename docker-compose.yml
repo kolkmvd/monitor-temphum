@@ -45,7 +45,11 @@ services:
       - GF_LIVE_MAX_CONNECTIONS=0
       # Silence the benign app-platform search / manifest-watcher warn spam.
       - GF_LOG_FILTERS=search-manifest-watcher:error bleve-backend:error resource-search:error
+      # SQLite WAL mode: readers + writer concurrently -> far fewer "database is
+      # locked" retries (provisioning + search index both write the same DB).
+      - GF_DATABASE_WAL=true
     volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
@@ -69,12 +73,16 @@ services:
     build: ./exporter
     container_name: temphum-exporter
     restart: unless-stopped
+    # Run tini as PID 1 so SIGTERM reaches Python and the container stops fast
+    # (a bare Python PID 1 ignores SIGTERM -> Docker waits the full 10s timeout).
+    init: true
     ports:
       - "9101:9101"
     environment:
-      - SCPI_PORT=/dev/serial/by-id/usb-Adafruit_SHT4x_Trinkey_XXXX-if02
+      # Machine-specific: set these in a .env file next to this compose file.
+      - SCPI_PORT=${SCPI_PORT}
+      - LOCATION=${LOCATION:-}
       - POLL_INTERVAL=5
-      - LOCATION=serverroom
       # Humidity limits (%), pushed to the Trinkey on connect; they drive the
       # status LED (green inside, amber within WARN of a limit, red outside).
       - HUM_LOW=35
