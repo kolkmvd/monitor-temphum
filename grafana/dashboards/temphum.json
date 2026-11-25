@@ -31,7 +31,7 @@
       },
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
-        { "refId": "A", "expr": "sht45_temperature_celsius", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "refId": "A", "instant": true, "expr": "sht45_temperature_celsius", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ]
     },
     {
@@ -56,7 +56,7 @@
       },
       "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
-        { "refId": "A", "expr": "sht45_humidity_percent", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "refId": "A", "instant": true, "expr": "sht45_humidity_percent", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ]
     },
     {
@@ -75,7 +75,7 @@
       },
       "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [
-        { "refId": "A", "expr": "sht45_up", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+        { "refId": "A", "instant": true, "expr": "sht45_up", "datasource": { "type": "prometheus", "uid": "prometheus" } }
       ]
     },
     {
