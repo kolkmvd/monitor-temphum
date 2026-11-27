@@ -1,106 +1,303 @@
 {
-  "uid": "temphum",
-  "title": "Temperature & Humidity (SHT45)",
-  "tags": ["sht45", "scpi"],
-  "timezone": "browser",
-  "schemaVersion": 39,
-  "version": 1,
-  "refresh": "1m",
-  "time": { "from": "now-6h", "to": "now" },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "datasource", "uid": "grafana" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "datasource", "uid": "grafana" },
+        "enable": true,
+        "filter": { "exclude": false, "ids": [2] },
+        "hide": true,
+        "iconColor": "red",
+        "name": "Zondag",
+        "target": {
+          "queryType": "timeRegions",
+          "refId": "Anno",
+          "timeRegion": { "fromDayOfWeek": 7, "timezone": "browser", "toDayOfWeek": 7 }
+        }
+      },
+      {
+        "datasource": { "type": "datasource", "uid": "grafana" },
+        "enable": true,
+        "filter": { "exclude": false, "ids": [1] },
+        "hide": true,
+        "iconColor": "red",
+        "name": "Zondag",
+        "target": {
+          "queryType": "timeRegions",
+          "refId": "Anno",
+          "timeRegion": { "fromDayOfWeek": 7, "timezone": "browser", "toDayOfWeek": 7 }
+        }
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
   "panels": [
     {
-      "id": 1,
-      "type": "stat",
-      "title": "Temperature",
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
-          "unit": "celsius",
           "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "blue", "value": null },
-              { "color": "green", "value": 15 },
-              { "color": "orange", "value": 28 },
-              { "color": "red", "value": 35 }
-            ]
-          }
-        }
-      },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "targets": [
-        { "refId": "A", "instant": true, "expr": "sht45_temperature_celsius", "datasource": { "type": "prometheus", "uid": "prometheus" } }
-      ]
-    },
-    {
-      "id": 2,
-      "type": "stat",
-      "title": "Humidity",
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "humidity",
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "orange", "value": null },
-              { "color": "green", "value": 35 },
-              { "color": "blue", "value": 65 }
-            ]
-          }
-        }
-      },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "targets": [
-        { "refId": "A", "instant": true, "expr": "sht45_humidity_percent", "datasource": { "type": "prometheus", "uid": "prometheus" } }
-      ]
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Sensor status",
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": {
-        "defaults": {
           "mappings": [
-            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+            { "options": { "match": "null", "result": { "text": "N/A" } }, "type": "special" }
           ],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null } ] }
-        }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#ffffff" },
+              { "color": "#96D98D", "value": 15 },
+              { "color": "#ffffff", "value": 25 }
+            ]
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
       },
-      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "gridPos": { "h": 7, "w": 3, "x": 0, "y": 0 },
+      "id": 8,
+      "options": {
+        "allowNeedleCrossLimits": true,
+        "animateNeedleValueTransition": true,
+        "animateNeedleValueTransitionSpeed": 100,
+        "edgeWidth": 0.05,
+        "gaugeRadius": 0,
+        "innerColor": "#fff",
+        "maxNeedleAngle": 320,
+        "maxTickAngle": 300,
+        "maxValue": 30,
+        "minValue": -10,
+        "needleColor": "#0099cc",
+        "needleWidth": 5,
+        "operatorName": "last",
+        "outerEdgeColor": "#0099CC",
+        "padding": 0.05,
+        "pivotColor": "#999",
+        "pivotRadius": 0.1,
+        "showThresholdBandLowerRange": false,
+        "showThresholdBandMiddleRange": true,
+        "showThresholdBandOnGauge": true,
+        "showThresholdBandUpperRange": true,
+        "showTickLabels": true,
+        "showTitle": false,
+        "showValue": true,
+        "tickLabelColor": "#000",
+        "tickLabelFontSize": 18,
+        "tickLengthMaj": 0.15,
+        "tickLengthMin": 0.05,
+        "tickMajorColor": "#0099CC",
+        "tickMinorColor": "#000",
+        "tickSpacingMajor": 10,
+        "tickSpacingMinor": 1,
+        "tickWidthMajor": 5,
+        "tickWidthMinor": 1,
+        "ticknessGaugeBasis": 200,
+        "unitFormat": "celsius",
+        "unitsLabelColor": "#000",
+        "valueFontSize": 22
+      },
+      "pluginVersion": "2.2.0",
       "targets": [
-        { "refId": "A", "instant": true, "expr": "sht45_up", "datasource": { "type": "prometheus", "uid": "prometheus" } }
-      ]
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "refId": "A", "expr": "sht45_temperature_celsius", "instant": true }
+      ],
+      "title": "Temperatuur",
+      "type": "briangann-gauge-panel"
     },
     {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 1,
+          "displayName": "Temperatuur",
+          "mappings": [],
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 21, "x": 3, "y": 0 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "max", "min"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "refId": "A", "expr": "sht45_temperature_celsius", "legendFormat": "Temperatuur" }
+      ],
+      "title": "Temperatuur",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "mappings": [
+            { "options": { "match": "null", "result": { "text": "N/A" } }, "type": "special" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#ffffff" },
+              { "color": "#C8F2C2", "value": 40 },
+              { "color": "#ffffff", "value": 60 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 3, "x": 0, "y": 7 },
+      "id": 10,
+      "options": {
+        "allowNeedleCrossLimits": true,
+        "animateNeedleValueTransition": true,
+        "animateNeedleValueTransitionSpeed": 100,
+        "edgeWidth": 0.05,
+        "gaugeRadius": 0,
+        "innerColor": "#fff",
+        "maxNeedleAngle": 320,
+        "maxTickAngle": 300,
+        "maxValue": 100,
+        "minValue": 0,
+        "needleColor": "#0099cc",
+        "needleWidth": 5,
+        "operatorName": "last",
+        "outerEdgeColor": "#0099CC",
+        "padding": 0.05,
+        "pivotColor": "#999",
+        "pivotRadius": 0.1,
+        "showThresholdBandLowerRange": true,
+        "showThresholdBandMiddleRange": true,
+        "showThresholdBandOnGauge": true,
+        "showThresholdBandUpperRange": true,
+        "showTickLabels": true,
+        "showTitle": false,
+        "showValue": true,
+        "tickLabelColor": "#000",
+        "tickLabelFontSize": 18,
+        "tickLengthMaj": 0.15,
+        "tickLengthMin": 0.05,
+        "tickMajorColor": "#0099CC",
+        "tickMinorColor": "#000",
+        "tickSpacingMajor": 10,
+        "tickSpacingMinor": 1,
+        "tickWidthMajor": 5,
+        "tickWidthMinor": 1,
+        "ticknessGaugeBasis": 200,
+        "unitFormat": "percent",
+        "unitsLabelColor": "#000",
+        "valueFontSize": 22
+      },
+      "pluginVersion": "2.2.0",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "refId": "A", "expr": "sht45_humidity_percent", "instant": true }
+      ],
+      "title": "Luchtvochtigheid",
+      "type": "briangann-gauge-panel"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "decimals": 1,
+          "displayName": "Luchtvochtigheid",
+          "mappings": [],
+          "unit": "humidity"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 21, "x": 3, "y": 7 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "max", "min"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "refId": "A", "expr": "sht45_humidity_percent", "legendFormat": "Luchtvochtigheid" }
+      ],
+      "title": "Luchtvochtigheid",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 14 },
       "id": 4,
-      "type": "timeseries",
-      "title": "Temperature (°C)",
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 } } },
-      "targets": [
-        { "refId": "A", "expr": "sht45_temperature_celsius", "legendFormat": "calibrated", "datasource": { "type": "prometheus", "uid": "prometheus" } },
-        { "refId": "B", "expr": "sht45_temperature_raw_celsius", "legendFormat": "raw", "datasource": { "type": "prometheus", "uid": "prometheus" } }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Relative humidity (%)",
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "humidity", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 } } },
-      "targets": [
-        { "refId": "A", "expr": "sht45_humidity_percent", "legendFormat": "calibrated", "datasource": { "type": "prometheus", "uid": "prometheus" } },
-        { "refId": "B", "expr": "sht45_humidity_raw_percent", "legendFormat": "raw", "datasource": { "type": "prometheus", "uid": "prometheus" } }
-      ]
+      "options": {
+        "alertInstanceLabelFilter": "",
+        "alertName": "",
+        "dashboardAlerts": false,
+        "groupBy": [],
+        "groupMode": "default",
+        "maxItems": 10,
+        "showInactiveAlerts": false,
+        "showOptions": "current",
+        "sortOrder": 1,
+        "stateFilter": { "error": true, "firing": true, "normal": true, "pending": true, "recovering": true },
+        "viewMode": "list"
+      },
+      "title": "Sensor status",
+      "type": "alertlist"
     }
-  ]
+  ],
+  "preload": false,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "tags": ["sht45"],
+  "templating": { "list": [] },
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Temperatuur & Luchtvochtigheid",
+  "uid": "temphum",
+  "version": 1
 }

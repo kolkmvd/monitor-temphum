@@ -32,12 +32,15 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      # D3 Gauge panel plugin used by the dashboard (downloaded at startup).
+      - GF_INSTALL_PLUGINS=briangann-gauge-panel
       # Served under the /grafana sub-path behind Traefik.
       - GF_SERVER_ROOT_URL=https://${GRAFANA_HOST}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      # Trim idle CPU: no alerting scheduler, no phone-home, no Live.
-      - GF_UNIFIED_ALERTING_ENABLED=false
+      # Unified alerting on (for the <40% / >60% humidity alert); legacy off.
+      - GF_UNIFIED_ALERTING_ENABLED=true
       - GF_ALERTING_ENABLED=false
+      # Trim idle CPU: no phone-home, no Live.
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
